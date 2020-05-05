@@ -1,3 +1,6 @@
+# this file contains the R functions used by the other main files to 
+# reproduce the simulations reported in the paper
+
 # required packages
 require(shapes)
 require(mvtnorm)
@@ -98,9 +101,9 @@ grad_MCMC_ESJD<-function(T=T,sigma=sigma,n=n,method=NULL){
   return(ESJD_vec)
 }
 
-###################################
-####### DIAGONAL ADAPTATION #######
-###################################
+##################################################
+####### PROPOSALS WITH DIAGONAL ADAPTATION #######
+##################################################
 # this function implements RWM/MALA/Barker with diagonal covariance adaptation
 diag_grad_MCMC<-function(T=T,n=n,method=NULL,start_x,start_sigma=NULL){
   stopifnot(method=="MALA"|method=="RWM"|method=="Barker")
@@ -195,111 +198,116 @@ rbarker_diag<-function(c,sigma,diag_sd){
   return(z*b)
 }
 
-##########################################
-####### FULL COVARIANCE ADAPTATION #######
-##########################################
-# this function implements RWM/MALA/Barker with full covariance adaptation
-full_cov_grad_MCMC<-function(T=T,n=n,method=NULL,start_x,start_sigma=NULL,start_SIGMA=NULL,eps_reg=0){
-  stopifnot(method=="MALA"|method=="MALTA"|method=="MALTAc"|method=="RWM"|method=="Barker")
-  sigma<-start_sigma
-  if(method=="MALA"){
-    log_q_ratio_prec<-log_q_ratio_prec_mala
-    rprop<-rmala_prec
-    target_ap<-0.574
-    if(is.null(sigma)){sigma<-2.4/sqrt(n^(1/3))}
+###################################################################
+### DEFINE THE 4 SCENARIOS USED IN HETEROGENEOUS TARGETS SECTION  #####
+###################################################################
+set_target<-function(scenario){
+  print(paste("Set target as in scenario ",scenario))
+  if(scenario==1){#Gaussian with one small scale
+    n<<-100 # number of dimensions
+    Sigma_targ<<-diag(rep(1,n))
+    Sigma_targ[1,1]<<-0.01^2
+    Prec_target<<-solve(Sigma_targ)
+    log_f_ratio<<-function(x,y){return(-0.5*(
+      matrix(y,nrow = 1,ncol = n)%*%Prec_target%*%matrix(y,nrow = n,ncol = 1)-
+        matrix(x,nrow = 1,ncol = n)%*%Prec_target%*%matrix(x,nrow = n,ncol = 1)
+    ))}
+    # g_prime computes the gradient of the log_target
+    g_prime<<-function(x){return(-c(matrix(x,nrow = 1,ncol = n)%*%Prec_target))}
   }
-  if(method=="RWM"){
-    log_q_ratio_prec<-log_q_ratio_prec_rw
-    rprop<-rrw_prec
-    target_ap<-0.234
-    if(is.null(sigma)){sigma<-2.4/sqrt(n)}
+  if(scenario==2){#Gaussian with random scales
+    n<<-100
+    scales<<-exp(rnorm(n,mean = 0,sd = 1))
+    variances<<-scales^2
+    Sigma_targ<<-diag(variances)
+    Prec_target<<-solve(Sigma_targ)
+    log_f_ratio<<-function(x,y){return(-0.5*(
+      matrix(y,nrow = 1,ncol = n)%*%Prec_target%*%matrix(y,nrow = n,ncol = 1)-
+        matrix(x,nrow = 1,ncol = n)%*%Prec_target%*%matrix(x,nrow = n,ncol = 1)
+    ))}
+    g_prime<<-function(x){return(-c(matrix(x,nrow = 1,ncol = n)%*%Prec_target))}
   }
-  if(method=="Barker"){
-    log_q_ratio_prec<-log_q_ratio_prec_barker
-    rprop<-rbarker_prec
-    target_ap<-0.4
-    if(is.null(sigma)){sigma<-2.4/sqrt(n^(1/3))}
-  }
-  # SET STARTING PARAMETERS
-  x<-start_x
-  t<-1
-  sigma_vec<-rep(NA,T-1)
-  x_samples<-matrix(NA,nrow = T,ncol = n)
-  x_samples[1,]<-x
-  ## parameters for preconditioning and adaption
-  if(is.null(start_SIGMA)){
-    SIGMA<-diag(n)
-  }else{    
-    SIGMA<-start_SIGMA
-  }
-  C<-chol(SIGMA+eps_reg*diag(n)) # if eps_reg>0 there is regularization. Default is 0
-  C_inv<-solve(C)
-  x_means<-x
-  sigma_vec[1]<-sigma
-  # RUNNING MCMC LOOP
-  for (t in 2:T){
-    y<-x+rprop(g_prime(x),sigma,C,C_inv)
-    if(log_f_ratio(x,y)<= -300){# if statement added for numerical stability
-      ap<-0
-    }else{
-      ap<-min(1,exp(log_f_ratio(x,y)+log_q_ratio_prec(x,y,sigma,C,C_inv)))
+  if(scenario==3){#Hyperbolic with random scales
+    n<<-100
+    delta2<<-0.1
+    scales<<-exp(rnorm(n,mean = 0,sd = 1))
+    log_f_ratio<<-function(x,y){return(-sum(
+      (sqrt(delta2+(y/scales)^2)-sqrt(delta2+(x/scales)^2))
+    ))}
+    g_prime<<-function(x){
+      x_resc<- x/scales
+      grad<- -x_resc/sqrt(delta2+x_resc^2)
+      return(grad/scales)
     }
-    if (runif(1)<ap){
-      x<-y
-    }
-    # do adaptation of global scale
-    log_sigma_2<-log(sigma^2)+gamma(1+t)*(ap-target_ap)
-    sigma<-sqrt(exp(log_sigma_2))
-    # adapt means with robbins-monroe
-    x_means<-x_means+gamma(1+t)*(x-x_means)
-    # adapt covanriance with robbins-monroe
-    SIGMA_0<-matrix(x-x_means,nrow=n,ncol=1)%*%matrix(x-x_means,nrow=1,ncol=n)
-    SIGMA<-SIGMA+gamma(1+t)*(SIGMA_0-SIGMA)
-    C<-chol(SIGMA+eps_reg*diag(n)) # if eps_reg>0 there is regularization. Default is 0
-    C_inv<-solve(C)
-    # store samples
-    x_samples[t,]<-x
-    # store adaptation parameters
-    sigma_vec[t]<-sigma
   }
-  return(list(x_samples=x_samples,sigma_vec=sigma_vec,SIGMA=SIGMA))
-}
-## MALA PROPOSAL AND ACCEPTANCE PROBABILITY (PRECONDITIONED)
-log_q_ratio_prec_mala<-function(x,y,sigma,C,C_inv){
-  return(
-    log_q_prec_mala(y,x,sigma,C,C_inv)-log_q_prec_mala(x,y,sigma,C,C_inv)
-  )
-}
-log_q_prec_mala<-function(x,y,sigma,C,C_inv){
-  return(
-    dmvnorm(x=c(y) , mean = as.vector(x+t(C)%*%C%*%g_prime(x)) , sigma = t(C)%*%C, log = TRUE
-    )
-  )
-}
-rmala_prec <-function(c,sigma,C,C_inv){
-  return( t(C)%*%C%*%c + t(C) %*% rnorm(length(c)) )
-}
-## RANDOM WALK PROPOSAL AND ACCEPTANCE PROBABILITY (PRECONDITIONED)
-log_q_ratio_prec_rw<-function(x,y,sigma,C,C_inv){return(0)}
-rrw_prec<-function(c,sigma,C,C_inv){
-  c_prec<-C%*%c
-  return( c( t(C)%*%rrw(c_prec,sigma)  ) )
-}
-## BARKER PROPOSAL AND ACCEPTANCE PROBABILITY (PRECONDITIONED)
-log_q_ratio_prec_barker<-function(x,y,sigma,C,C_inv){
-  c_x_prec<-c(c(g_prime(x))%*%t(C))
-  c_y_prec<-c(c(g_prime(y))%*%t(C))
-  z<-t(C_inv)%*%(y-x)
-  beta1<-  c(-c_y_prec*(-z))
-  beta2<-  c(-c_x_prec*z)
-  return(sum(# compute acceptance with log_sum_exp trick for numerical stability
-    -(pmax(beta1,0)+log1p(exp(-abs(beta1))))+
-      (pmax(beta2,0)+log1p(exp(-abs(beta2))))
-  ))
-}
-rbarker_prec <-function(c,sigma,C,C_inv){
-  c_prec<-c(c(c)%*%t(C))
-  return(  t(C) %*% rbarker(c_prec,sigma)   )
+  if(scenario==4){#Skew-normal with random scales
+    n<<-100
+    scales<<-exp(rnorm(n,mean = 0,sd = 1))
+    alpha<<-4
+    log_f_ratio<<-function(x,y){
+      return(sum(
+        dnorm(y/scales,0,1, log = TRUE)+pnorm(alpha*y/scales,0,1, log.p = TRUE)-
+          (dnorm(x/scales,0,1, log = TRUE)+pnorm(alpha*x/scales,0,1, log.p = TRUE))
+      ))
+    }
+    g_prime<<-function(x){
+      x_resc<- x/scales
+      grad<- -x_resc+
+        alpha*exp(dnorm(alpha*x_resc,0,1, log = TRUE)-pnorm(alpha*x_resc,0,1, log.p = TRUE))
+      return(grad/scales)
+    }
+  }
 }
 
-
+##################################
+#### FUNCTION TO PLOT OUTPUT #####
+##################################
+plot_tuning_traceplots<-function(output_MALA,output_RWM,output_Barker){
+  par(mfrow=c(4,3))
+  time_window<-c(1:T)
+  ylim=range(c(output_MALA$sigma_vec,output_RWM$sigma_vec,output_Barker$sigma_vec))
+  plot(output_MALA$sigma_vec,type="l",ylim=ylim,main="MALA\n Adaptation of global scale",log = "y",ylab="",xlab="Markov chain iteration")
+  plot(output_RWM$sigma_vec,type="l",ylim=ylim,main="RWM\n Adaptation of global scale",log = "y",ylab="",xlab="Markov chain iteration")
+  plot(output_Barker$sigma_vec,type="l",ylim=ylim,main="Barker\n Adaptation of global scale",log = "y",ylab="",xlab="Markov chain iteration")
+  ylim<-NULL
+  for (i in c(1:n)){
+    ylim=range(c(ylim,output_MALA$sigma_t[time_window,i],output_RWM$sigma_t[time_window,i],output_Barker$sigma_t[time_window,i]))
+  }
+  plot((output_MALA$sigma_t[time_window,3]),type="l",ylim=ylim,main="Adaptation of local scales",ylab="",xlab="Markov chain iteration",log="y")
+  for(j in c(1:n)){
+    lines((output_MALA$sigma_t[time_window,j]))
+  }
+  plot((output_RWM$sigma_t[time_window,3]),type="l",ylim=ylim,main="Adaptation of local scales",ylab="",xlab="Markov chain iteration",log="y")
+  for(j in c(1:n)){
+    lines((output_RWM$sigma_t[time_window,j]))
+  }
+  plot((output_Barker$sigma_t[time_window,3]),type="l",ylim=ylim,main="Adaptation of local scales",ylab="",xlab="Markov chain iteration",log="y")
+  for(j in c(1:n)){
+    lines((output_Barker$sigma_t[time_window,j]))
+  }
+  i<-1
+  ylim=range(c(output_MALA$x_samples[time_window,i],output_RWM$x_samples[time_window,i],output_Barker$x_samples[time_window,i]))
+  ylim<-c(-0.1,0.1)
+  plot(output_MALA$x_samples[time_window,i],type="l",ylim=ylim,main="Traceplots of x_1",xlab="Markov chain iteration",ylab = "")
+  plot(output_RWM$x_samples[time_window,i],type="l",ylim=ylim,main="Traceplots of x_1",xlab="Markov chain iteration",ylab = "")
+  plot(output_Barker$x_samples[time_window,i],type="l",ylim=ylim,main="Traceplots of x_1",xlab="Markov chain iteration",ylab ="")
+  if(n>1){
+    ylim<-NULL
+    for (i in c(2:n)){
+      ylim=range(c(ylim,output_MALA$x_samples[time_window,i],output_RWM$x_samples[time_window,i],output_Barker$x_samples[time_window,i]))
+    }
+    plot(output_MALA$x_samples[time_window,3],type="l",ylim=ylim,main="Traceplots of x_2,...,x_n",ylab ="",xlab="Markov chain iteration")
+    for(j in c(2:n)){
+      lines(output_MALA$x_samples[time_window,j])
+    }
+    plot(output_RWM$x_samples[time_window,3],type="l",ylim=ylim,main="Traceplots of x_2,...,x_n",ylab ="",xlab="Markov chain iteration")
+    for(j in c(2:n)){
+      lines(output_RWM$x_samples[time_window,j])
+    }
+    plot(output_Barker$x_samples[time_window,3],type="l",ylim=ylim,main="Traceplots of x_2,...,x_n",ylab ="",xlab="Markov chain iteration")
+    for(j in c(2:n)){
+      lines(output_Barker$x_samples[time_window,j])
+    }
+  }
+  par(mfrow=c(1,1))
+}
