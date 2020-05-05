@@ -1,8 +1,11 @@
-setwd('C:/Users/ZanellaG/Dropbox/BalancedMCMC/Balanced MCMC/Code_giacomo/Code for github/')
-source('functions.R')
+# the following code reproduces the simulation 
+# reported in Section 5.1 "Illustrations of robustness to tuning"
+
+## LOAD FUNCTIONS FROM GITHUB REPOSITORY
+source('https://raw.githubusercontent.com/gzanella/barker/master/functions.R')
 
 # DEFINE NUMBER OF MONTE CARLO/MCMC ITERATIONS
-T<-10^4 # !!! INCREASE T TO 10^5 TO GET MORE STABLE ESTIMATES !!!
+T<-10^3 # **** INCREASE T TO 10^5 TO GET MORE STABLE ESTIMATES ****
 
 # DEFINE GRID OF VALUES OF SIGMA
 sigma_vec<-2.38*exp(seq(from = -5,to = 6,length.out = 20))
@@ -70,6 +73,7 @@ for (sigma in sigma_vec){
 
 # PLOT ESJD OF FIRST COORDINATE
 par(mfrow=c(1,3))
+par(mar=c(3,2.7,1.6,1))
 # GAUSSIAN TARGET
 log_axes<-"xy"
 ylim=c(exp(-13),max(ESJD_MALA_G,ESJD_RW_G,ESJD_BARKER_G,na.rm = TRUE))
