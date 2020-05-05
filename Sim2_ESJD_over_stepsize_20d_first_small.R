@@ -1,5 +1,8 @@
-setwd('C:/Users/ZanellaG/Dropbox/BalancedMCMC/Balanced MCMC/Code_giacomo/Code for github/')
-source('functions.R')
+# the following code reproduces the simulation reported in 
+# Section 8.1 of the supplement "Additional example for Section 5.1 of the paper"
+
+## LOAD FUNCTIONS FROM GITHUB REPOSITORY
+source('https://raw.githubusercontent.com/gzanella/barker/master/functions.R')
 
 # ### DEFINE TARGET (MULTIV-NORMAL WITH FIRST COMPONENT SMALL) ####
 n<-20
@@ -9,7 +12,7 @@ g_prime<-function(x,sigma_targ=sigma_targets){return(-x/(sigma_targ^2))}
 rtarget<-function(n,sigma_targ=sigma_targets){return(rnorm(n,mean = 0,sd = sigma_targ))}
 
 # DEFINE NUMBER OF MCMC ITERATIONS
-T<-10^4 # !!! INCREASE T TO 10^5 TO GET MORE STABLE ESTIMATES !!!
+T<-10^3 # **** INCREASE T TO 10^5 TO GET MORE STABLE ESTIMATES ****
 
 # DEFINE GRID OF VALUES OF SIGMA
 sigma_vec<-2.38/sqrt(n)*exp(seq(from = -7.5,to = 2,length.out = 25))
