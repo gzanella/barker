@@ -1,12 +1,16 @@
-setwd('C:/Users/ZanellaG/Dropbox/BalancedMCMC/Balanced MCMC/Code_giacomo/Code for github/')
-source('functions.R')
+# the following code reproduces the simulations reported in 
+# Section 5.2 "Comparison of efficiency on isotropic targets" for the Gaussian case
+
+## LOAD FUNCTIONS FROM GITHUB REPOSITORY
+source('https://raw.githubusercontent.com/gzanella/barker/master/functions.R')
 
 ### DEFINE ISOTROPIC NORMAL TARGET ####
 log_f_ratio<-function(x,y){return(sum(-y^2/2+x^2/2))}
 g_prime<-function(x){return(-x)}
 rtarget<-function(n){return(rnorm(n))}
 ### T IS THE NUMBER OF MONTE CARLO SAMPLES ####
-T<-1000
+T<-100 # **** INCREASE T TO 1000 TO GET MORE STABLE ESTIMATES ****
+
 
 ### n_vec IS THE GRID OF DIMENSIONS TO PLOT ####
 n_vec<-ceiling(2^c(3:10))
