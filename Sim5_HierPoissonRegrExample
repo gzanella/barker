@@ -1,0 +1,62 @@
+## LOAD FUNCTIONS FROM GITHUB REPOSITORY
+source('https://raw.githubusercontent.com/gzanella/barker/master/functions.R')
+
+# scenarios 1, 2 and 3 refer to the ones in the paper Livingstone&Zanella(2020)
+scenario<-1 # set to 1, 2, or 3 (1=easiest, 3=hardest)
+
+#define target (Hierarchical Poisson regression example, with hyperparameters depending on scenario)
+n1<-50  # number of groups 
+n<-n1+1  #number of parameters
+N<-n1*5  # number of observations
+vmu=1/(10^2) # prior precision for global means
+blk.ind<-rep(c(1:n1),each=5) # group membership of the observations
+if (scenario==1){
+  va=1/(1^2) # prior precision for random effects
+  true_mu<-5 # define data-generating mu
+}
+if (scenario==2){
+  va=1/(3^2) # prior precision for random effects
+  true_mu<-5 # define data-generating mu
+}
+if (scenario==3){
+  va=1/(3^2) # prior precision for random effects
+  true_mu<-10 # define data-generating mu
+}
+print(paste("scenario=",scenario))
+# generate synth data
+set_nested_pois_target(n1=n1,vmu=vmu,va=va,true_mu=true_mu,N=N,blk.ind=blk.ind)
+stopifnot(!any(is.na(y.vec)))
+
+# Sample starting point (common to all algorithms)
+mu<-rnorm(1,0,1/sqrt(vmu))
+print(paste("starting mu (from prior) is ",mu))
+start_x<-c(mu,mu+rnorm(n1,0,1/sqrt(va)))
+
+## RUN ALGORITHMS
+T<-5*10^4 # NUMBER OF MCMC ITERATIONS
+print(paste("sampling with RWM"))
+output_RWM<-diag_grad_MCMC(T=T,n=n,method="RWM",start_x=start_x)
+print(paste("sampling with Barker"))
+output_Barker<-diag_grad_MCMC(T=T,n=n,method="Barker",start_x=start_x)
+print(paste("sampling with MALA"))
+output_MALA<-diag_grad_MCMC(T=T,n=n,method="MALA",start_x=start_x)
+
+# plot traceplots
+par(mfrow=c(2,3))
+plot(output_RWM$x_samples[,1],type="l",main="RWM",ylab="mu")
+plot(output_Barker$x_samples[,1],type="l",main="Barker",ylab="mu")
+plot(output_MALA$x_samples[,1],type="l",main="MALA",ylab="mu")
+plot(output_RWM$x_samples[,2],type="l",main="RWM",ylab="eta_1")
+plot(output_Barker$x_samples[,2],type="l",main="Barker",ylab="eta_1")
+plot(output_MALA$x_samples[,2],type="l",main="MALA",ylab="eta_1")
+par(mfrow=c(1,1))
+
+# COMPUTE ESS FOR THE ALGORITHMS USING CODA
+require(coda)
+time_window<-T/2+c(1:(T/2))
+ess_RWM<-apply(output_RWM$x_samples[time_window,],2,effectiveSize)
+ess_Barker<-apply(output_Barker$x_samples[time_window,],2,effectiveSize)
+ess_MALA<-apply(output_MALA$x_samples[time_window,],2,effectiveSize)
+print(paste("RWM min ESS=",min(ess_RWM)))
+print(paste("Barker min ESS=",min(ess_Barker)))
+print(paste("MALA min ESS=",min(ess_MALA)))
