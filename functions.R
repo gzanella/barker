@@ -259,6 +259,51 @@ set_target<-function(scenario){
   }
 }
 
+###################################################################
+### DEFINE THE HIERARCHICAL POISSON REGRESSION TARGET  #####
+###################################################################
+set_nested_pois_target<-function(n1=10,
+                                 vmu=1/(10^2), # prior precision for global means
+                                 va=1/(2^2), # prior precision for random effects
+                                 true_mu=5,
+                                 N=NULL, # num of obs
+                                 blk.ind=NULL
+){
+  stopifnot(length(blk.ind)==N)
+  n<<-1+n1# number of parameters to sample
+  par_names<<-rep(NA,n)
+  par_names[1]<<-c("mu")
+  ind1<<-1+1:n1
+  par_names[ind1]<<-c("eta")
+  ## generate data
+  true_eta<<-true_mu+rnorm(n1,mean = 0,sd = 1/sqrt(va))
+  blk.list<<-lapply(X = c(1:n1),FUN = function(i){which(blk.ind==i)})
+  y.vec<<-c(rpois(n = N,lambda = exp(true_eta[blk.ind])))
+  # target and gradient
+  log_f_ratio<<-function(x,y){
+    return(
+      log_f(y)-log_f(x)
+    )}
+  log_f<<-function(x){
+    mu<-x[1]
+    eta<-x[ind1]
+    log_lambda<-eta[blk.ind]
+    return(
+      -mu^2*vmu/2-sum((eta-mu)^2)*va/2+  #log prior
+        sum(-exp(log_lambda)+y.vec*(log_lambda)) #log likelihoods
+    )
+  }
+  g_prime<<-function(x,sigma_0=sigma0){
+    mu<-x[1]
+    eta<-x[ind1]
+    lambda.vec<-exp(eta[blk.ind])
+    ly_diff<-lambda.vec-y.vec
+    return(c(-mu*vmu-sum(mu-eta)*va,#grad_mu
+             -(eta-mu)*va-vapply(blk.list,FUN = function(ii){sum(ly_diff[ii])},FUN.VALUE = 1)#grad_eta
+    ))
+  }
+}
+
 ##################################
 #### FUNCTION TO PLOT OUTPUT #####
 ##################################
