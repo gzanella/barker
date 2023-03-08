@@ -8,7 +8,8 @@ rbarker <-function(x,grad,sigma){
   return(x+z*b)
 }
 
-## the log-acceptance rate is computed as follows
+## the contribution to the log-acceptance rate coming from
+## the proposal, i.e. log(q(y,x)/q(x,y)), is computed as follows
 log_q_ratio_barker<-function(x,y,grad_x,grad_y){
   # x: current location (vector)
   # y: proposed location (vector)
